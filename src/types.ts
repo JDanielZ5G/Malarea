@@ -8,6 +8,7 @@ export enum Urgency {
 export interface PatientReport {
   id: string;
   chvId: string;
+  patientId: string; // Added for history tracking
   patientName: string;
   age: number;
   gender: "male" | "female" | "other";

@@ -6,6 +6,7 @@
       "type": "object",
       "properties": {
         "chvId": { "type": "string" },
+        "patientId": { "type": "string" },
         "patientName": { "type": "string" },
         "age": { "type": "number" },
         "gender": { "type": "string", "enum": ["male", "female", "other"] },
@@ -37,7 +38,7 @@
         },
         "timestamp": { "type": "number" }
       },
-      "required": ["chvId", "patientName", "age", "gender", "symptoms", "location", "timestamp"]
+      "required": ["chvId", "patientId", "patientName", "age", "gender", "symptoms", "location", "timestamp"]
     },
     "OutbreakAlert": {
       "title": "Outbreak Alert",

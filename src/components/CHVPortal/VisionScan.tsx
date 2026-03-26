@@ -1,6 +1,6 @@
 import React, { useRef, useState } from "react";
 import { detectMalnutrition } from "../../services/gemini";
-import { Camera, RefreshCw, Loader2, CheckCircle, AlertTriangle } from "lucide-react";
+import { Camera, RefreshCw, Loader2, CheckCircle, AlertTriangle, Activity } from "lucide-react";
 import { cn } from "../../lib/utils";
 
 interface VisionScanProps {
@@ -72,19 +72,24 @@ export default function VisionScan({ onScanComplete }: VisionScanProps) {
 
   return (
     <div className="space-y-6 bg-white p-6 rounded-2xl shadow-sm border border-slate-100">
-      <div className="flex items-center justify-between">
-        <h2 className="text-2xl font-semibold text-slate-900">Malnutrition Vision Scan</h2>
-        <Camera className="w-6 h-6 text-emerald-500" />
+      <div className="flex items-center justify-between mb-2">
+        <div>
+          <h2 className="text-2xl font-black text-slate-900 tracking-tight">Malnutrition Vision Scan</h2>
+          <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">Uganda MoH AI Diagnostic Tool</p>
+        </div>
+        <div className="w-12 h-12 bg-uganda-red/10 rounded-2xl flex items-center justify-center">
+          <Camera className="w-6 h-6 text-uganda-red" />
+        </div>
       </div>
 
       <div className="relative aspect-video bg-slate-100 rounded-xl overflow-hidden border-2 border-dashed border-slate-200 flex items-center justify-center">
         {!isCameraActive && !capturedImage && (
           <button
             onClick={startCamera}
-            className="flex flex-col items-center gap-2 text-slate-500 hover:text-emerald-600 transition-colors"
+            className="flex flex-col items-center gap-2 text-slate-500 hover:text-uganda-red transition-colors"
           >
             <Camera className="w-12 h-12" />
-            <span className="font-medium">Start Camera</span>
+            <span className="font-bold uppercase tracking-widest text-[10px]">Start Camera Feed</span>
           </button>
         )}
 
@@ -98,9 +103,9 @@ export default function VisionScan({ onScanComplete }: VisionScanProps) {
             />
             <button
               onClick={captureImage}
-              className="absolute bottom-4 left-1/2 -translate-x-1/2 w-16 h-16 bg-white rounded-full border-4 border-emerald-500 shadow-lg flex items-center justify-center"
+              className="absolute bottom-4 left-1/2 -translate-x-1/2 w-16 h-16 bg-white rounded-full border-4 border-uganda-red shadow-lg flex items-center justify-center"
             >
-              <div className="w-12 h-12 bg-emerald-500 rounded-full" />
+              <div className="w-12 h-12 bg-uganda-red rounded-full" />
             </button>
           </>
         )}
@@ -128,12 +133,12 @@ export default function VisionScan({ onScanComplete }: VisionScanProps) {
           <button
             onClick={handleAnalyze}
             disabled={isAnalyzing}
-            className="flex-1 py-3 bg-emerald-600 text-white rounded-xl font-semibold hover:bg-emerald-700 transition-colors flex items-center justify-center gap-2 disabled:opacity-50"
+            className="flex-1 py-3 bg-uganda-red text-white rounded-xl font-bold hover:bg-uganda-red/90 transition-all flex items-center justify-center gap-2 disabled:opacity-50 shadow-lg shadow-uganda-red/20"
           >
             {isAnalyzing ? (
               <>
                 <Loader2 className="w-5 h-5 animate-spin" />
-                Analyzing...
+                Uganda MoH AI Analyzing...
               </>
             ) : (
               "Analyze Scan"
@@ -145,14 +150,17 @@ export default function VisionScan({ onScanComplete }: VisionScanProps) {
       {scanResult && (
         <div className="p-5 rounded-xl bg-slate-50 border border-slate-200 space-y-4">
           <div className="flex items-center justify-between">
-            <h3 className="font-semibold text-slate-900">Vision Scan Results</h3>
+            <h3 className="font-bold text-slate-900 flex items-center gap-2">
+              <Activity className="w-4 h-4 text-uganda-red" />
+              Vision Scan Results
+            </h3>
             <div className={cn(
-              "flex items-center gap-1.5 px-3 py-1 rounded-full text-sm font-bold uppercase",
-              scanResult.status === "severe" ? "bg-red-100 text-red-600" :
-              scanResult.status === "at_risk" ? "bg-orange-100 text-orange-600" :
-              "bg-emerald-100 text-emerald-600"
+              "flex items-center gap-1.5 px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest",
+              scanResult.status === "severe" ? "bg-uganda-red text-white" :
+              scanResult.status === "at_risk" ? "bg-orange-500 text-white" :
+              "bg-uganda-yellow text-uganda-black"
             )}>
-              {scanResult.status === "severe" ? <AlertTriangle className="w-4 h-4" /> : <CheckCircle className="w-4 h-4" />}
+              {scanResult.status === "severe" ? <AlertTriangle className="w-3 h-3" /> : <CheckCircle className="w-3 h-3" />}
               {scanResult.status.replace("_", " ")}
             </div>
           </div>
@@ -164,7 +172,7 @@ export default function VisionScan({ onScanComplete }: VisionScanProps) {
             </div>
             <div className="w-full h-2 bg-slate-200 rounded-full overflow-hidden">
               <div 
-                className="h-full bg-emerald-500 transition-all duration-1000" 
+                className="h-full bg-uganda-red transition-all duration-1000" 
                 style={{ width: `${scanResult.confidence * 100}%` }}
               />
             </div>
@@ -176,7 +184,7 @@ export default function VisionScan({ onScanComplete }: VisionScanProps) {
 
           <button
             onClick={() => onScanComplete(scanResult)}
-            className="w-full py-3 bg-emerald-600 text-white rounded-xl font-semibold hover:bg-emerald-700 transition-colors"
+            className="w-full py-3 bg-uganda-red text-white rounded-xl font-bold hover:bg-uganda-red/90 transition-all shadow-lg shadow-uganda-red/20 uppercase tracking-widest text-xs"
           >
             Apply to Report
           </button>

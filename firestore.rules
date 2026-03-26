@@ -82,8 +82,9 @@ service cloud.firestore {
     }
 
     function isValidReport(data) {
-      return data.keys().hasAll(['chvId', 'patientName', 'age', 'gender', 'symptoms', 'location', 'timestamp']) &&
+      return data.keys().hasAll(['chvId', 'patientId', 'patientName', 'age', 'gender', 'symptoms', 'location', 'timestamp']) &&
              data.chvId == request.auth.uid &&
+             data.patientId is string && data.patientId.size() > 0 &&
              data.patientName is string && data.patientName.size() < 100 &&
              data.age is number && data.age >= 0 &&
              data.gender in ['male', 'female', 'other'] &&
@@ -114,7 +115,8 @@ service cloud.firestore {
     }
 
     match /reports/{reportId} {
-      allow read: if isAuthenticated();
+      // Officials can see all reports, CHVs see their own
+      allow read: if isOfficial() || (isCHV() && request.auth.uid == resource.data.chvId);
       allow create: if isCHV() && isValidReport(request.resource.data);
       allow update: if isOfficial() || (isCHV() && request.auth.uid == resource.data.chvId);
       allow delete: if isAdmin();

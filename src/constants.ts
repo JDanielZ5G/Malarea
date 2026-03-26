@@ -1,12 +1,15 @@
 export const DISTRICTS = [
-  "Nairobi Central",
-  "Mombasa North",
-  "Kisumu West",
-  "Nakuru East",
-  "Eldoret South",
-  "Machakos Central",
-  "Kilifi North",
-  "Garissa West"
+  "Kampala District",
+  "Entebbe Municipality",
+  "Jinja District",
+  "Mbarara District",
+  "Gulu District",
+  "Arua District",
+  "Mbale District",
+  "Masaka District",
+  "Lira District",
+  "Fort Portal City",
+  "Wakiso District"
 ];
 
 export const SYMPTOMS_LIST = [
@@ -25,11 +28,11 @@ export const SYMPTOMS_LIST = [
 ];
 
 export const THEME_COLORS = {
-  primary: "#10b981", // Emerald 500
-  secondary: "#3b82f6", // Blue 500
-  accent: "#f59e0b", // Amber 500
-  danger: "#ef4444", // Red 500
-  background: "#f8fafc", // Slate 50
-  card: "#ffffff",
-  text: "#0f172a" // Slate 900
+  primary: "#000000", // Uganda Black
+  secondary: "#FCDC04", // Uganda Yellow
+  accent: "#D90000", // Uganda Red
+  white: "#FFFFFF",
+  background: "#FFFEF5", // Very light yellow tint
+  card: "#FFFFFF",
+  text: "#1A1A1A"
 };

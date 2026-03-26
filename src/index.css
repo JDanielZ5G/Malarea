@@ -2,11 +2,14 @@
 
 @theme {
   --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  --color-uganda-black: #000000;
+  --color-uganda-yellow: #FCDC04;
+  --color-uganda-red: #D90000;
 }
 
 @layer base {
   body {
-    @apply bg-slate-50 text-slate-900 antialiased;
+    @apply bg-[#FFFEF5] text-slate-900 antialiased;
   }
 
   /* Custom Scrollbar */

@@ -2,7 +2,7 @@ import React, { useState } from "react";
 import { SYMPTOMS_LIST, DISTRICTS } from "../../constants";
 import { PatientReport, Urgency } from "../../types";
 import { analyzeSymptoms } from "../../services/gemini";
-import { Loader2, CheckCircle, AlertCircle } from "lucide-react";
+import { Loader2, CheckCircle, AlertCircle, Activity } from "lucide-react";
 import { cn } from "../../lib/utils";
 
 interface SymptomFormProps {
@@ -11,6 +11,7 @@ interface SymptomFormProps {
 
 export default function SymptomForm({ onReportSubmit }: SymptomFormProps) {
   const [patientName, setPatientName] = useState("");
+  const [patientId, setPatientId] = useState("");
   const [age, setAge] = useState("");
   const [gender, setGender] = useState<"male" | "female" | "other">("male");
   const [selectedSymptoms, setSelectedSymptoms] = useState<string[]>([]);
@@ -52,7 +53,9 @@ export default function SymptomForm({ onReportSubmit }: SymptomFormProps) {
   };
 
   const handleSubmit = () => {
+    const finalPatientId = patientId || patientName.toLowerCase().replace(/\s+/g, '-') + '-' + age;
     onReportSubmit({
+      patientId: finalPatientId,
       patientName,
       age: parseInt(age),
       gender,
@@ -75,8 +78,18 @@ export default function SymptomForm({ onReportSubmit }: SymptomFormProps) {
             type="text"
             value={patientName}
             onChange={e => setPatientName(e.target.value)}
-            className="w-full px-4 py-2 rounded-lg border border-slate-200 focus:ring-2 focus:ring-emerald-500 focus:border-transparent outline-none transition-all"
+            className="w-full px-4 py-2 rounded-lg border border-slate-200 focus:ring-2 focus:ring-uganda-red focus:border-transparent outline-none transition-all"
             placeholder="Enter name"
+          />
+        </div>
+        <div className="space-y-2">
+          <label className="text-sm font-medium text-slate-700">Patient ID (Optional)</label>
+          <input
+            type="text"
+            value={patientId}
+            onChange={e => setPatientId(e.target.value)}
+            className="w-full px-4 py-2 rounded-lg border border-slate-200 focus:ring-2 focus:ring-uganda-red focus:border-transparent outline-none transition-all"
+            placeholder="Auto-generated if empty"
           />
         </div>
         <div className="space-y-2">
@@ -85,7 +98,7 @@ export default function SymptomForm({ onReportSubmit }: SymptomFormProps) {
             type="number"
             value={age}
             onChange={e => setAge(e.target.value)}
-            className="w-full px-4 py-2 rounded-lg border border-slate-200 focus:ring-2 focus:ring-emerald-500 focus:border-transparent outline-none transition-all"
+            className="w-full px-4 py-2 rounded-lg border border-slate-200 focus:ring-2 focus:ring-uganda-red focus:border-transparent outline-none transition-all"
             placeholder="Enter age"
           />
         </div>
@@ -94,7 +107,7 @@ export default function SymptomForm({ onReportSubmit }: SymptomFormProps) {
           <select
             value={gender}
             onChange={e => setGender(e.target.value as any)}
-            className="w-full px-4 py-2 rounded-lg border border-slate-200 focus:ring-2 focus:ring-emerald-500 focus:border-transparent outline-none transition-all"
+            className="w-full px-4 py-2 rounded-lg border border-slate-200 focus:ring-2 focus:ring-uganda-red focus:border-transparent outline-none transition-all"
           >
             <option value="male">Male</option>
             <option value="female">Female</option>
@@ -106,7 +119,7 @@ export default function SymptomForm({ onReportSubmit }: SymptomFormProps) {
           <select
             value={district}
             onChange={e => setDistrict(e.target.value)}
-            className="w-full px-4 py-2 rounded-lg border border-slate-200 focus:ring-2 focus:ring-emerald-500 focus:border-transparent outline-none transition-all"
+            className="w-full px-4 py-2 rounded-lg border border-slate-200 focus:ring-2 focus:ring-uganda-red focus:border-transparent outline-none transition-all"
           >
             {DISTRICTS.map(d => (
               <option key={d} value={d}>{d}</option>
@@ -125,7 +138,7 @@ export default function SymptomForm({ onReportSubmit }: SymptomFormProps) {
               className={cn(
                 "px-3 py-1.5 rounded-full text-sm font-medium transition-all",
                 selectedSymptoms.includes(s)
-                  ? "bg-emerald-500 text-white"
+                  ? "bg-uganda-red text-white shadow-lg shadow-uganda-red/20"
                   : "bg-slate-100 text-slate-600 hover:bg-slate-200"
               )}
             >
@@ -140,7 +153,7 @@ export default function SymptomForm({ onReportSubmit }: SymptomFormProps) {
         <textarea
           value={description}
           onChange={e => setDescription(e.target.value)}
-          className="w-full px-4 py-2 rounded-lg border border-slate-200 focus:ring-2 focus:ring-emerald-500 focus:border-transparent outline-none transition-all h-24 resize-none"
+          className="w-full px-4 py-2 rounded-lg border border-slate-200 focus:ring-2 focus:ring-uganda-red focus:border-transparent outline-none transition-all h-24 resize-none"
           placeholder="Describe symptoms in detail..."
         />
       </div>
@@ -149,12 +162,12 @@ export default function SymptomForm({ onReportSubmit }: SymptomFormProps) {
         <button
           onClick={handleAnalyze}
           disabled={isAnalyzing}
-          className="w-full py-3 bg-emerald-600 text-white rounded-xl font-semibold hover:bg-emerald-700 transition-colors flex items-center justify-center gap-2 disabled:opacity-50"
+          className="w-full py-3 bg-uganda-red text-white rounded-xl font-bold hover:bg-uganda-red/90 transition-all flex items-center justify-center gap-2 disabled:opacity-50 shadow-lg shadow-uganda-red/20"
         >
           {isAnalyzing ? (
             <>
               <Loader2 className="w-5 h-5 animate-spin" />
-              AI Analyzing...
+              Uganda MoH AI Analyzing...
             </>
           ) : (
             "Analyze with Gemini AI"
@@ -163,13 +176,16 @@ export default function SymptomForm({ onReportSubmit }: SymptomFormProps) {
       ) : (
         <div className="p-4 rounded-xl bg-slate-50 border border-slate-200 space-y-3">
           <div className="flex items-center justify-between">
-            <h3 className="font-semibold text-slate-900">AI Preliminary Assessment</h3>
+            <h3 className="font-bold text-slate-900 flex items-center gap-2">
+              <Activity className="w-4 h-4 text-uganda-red" />
+              AI Preliminary Assessment
+            </h3>
             <span className={cn(
-              "px-2 py-1 rounded text-xs font-bold uppercase",
-              aiResult.urgency === "critical" ? "bg-red-100 text-red-600" :
-              aiResult.urgency === "high" ? "bg-orange-100 text-orange-600" :
-              aiResult.urgency === "medium" ? "bg-blue-100 text-blue-600" :
-              "bg-emerald-100 text-emerald-600"
+              "px-2 py-1 rounded text-[10px] font-black uppercase tracking-widest",
+              aiResult.urgency === "critical" ? "bg-uganda-red text-white" :
+              aiResult.urgency === "high" ? "bg-orange-500 text-white" :
+              aiResult.urgency === "medium" ? "bg-blue-500 text-white" :
+              "bg-uganda-yellow text-uganda-black"
             )}>
               {aiResult.urgency} Urgency
             </span>
@@ -178,19 +194,19 @@ export default function SymptomForm({ onReportSubmit }: SymptomFormProps) {
             <span className="font-medium text-slate-800">Possible Conditions:</span> {aiResult.possibleConditions.join(", ")}
           </p>
           <div className="flex items-start gap-2 p-3 bg-white rounded-lg border border-slate-100">
-            <AlertCircle className="w-5 h-5 text-emerald-500 shrink-0 mt-0.5" />
-            <p className="text-sm text-slate-700 italic">{aiResult.recommendation}</p>
+            <AlertCircle className="w-5 h-5 text-uganda-red shrink-0 mt-0.5" />
+            <p className="text-sm text-slate-700 italic font-medium">{aiResult.recommendation}</p>
           </div>
           <div className="flex gap-2">
             <button
               onClick={() => setAiResult(null)}
-              className="flex-1 py-2 text-sm font-medium text-slate-600 hover:bg-slate-100 rounded-lg transition-colors"
+              className="flex-1 py-2 text-xs font-bold text-slate-400 hover:text-uganda-red transition-colors uppercase tracking-widest"
             >
               Re-analyze
             </button>
             <button
               onClick={handleSubmit}
-              className="flex-1 py-2 bg-emerald-600 text-white text-sm font-semibold rounded-lg hover:bg-emerald-700 transition-colors"
+              className="flex-1 py-2 bg-uganda-red text-white text-xs font-bold rounded-lg hover:bg-uganda-red/90 transition-all shadow-md shadow-uganda-red/10 uppercase tracking-widest"
             >
               Submit Report
             </button>
