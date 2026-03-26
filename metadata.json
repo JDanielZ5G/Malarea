@@ -1,0 +1,8 @@
+{
+  "name": "HealthLink AI",
+  "description": "An AI-powered platform for Community Health Volunteers to simplify diagnostics, detect malnutrition via vision, and provide real-time outbreak alerts to district officials.",
+  "requestFramePermissions": [
+    "camera",
+    "geolocation"
+  ]
+}

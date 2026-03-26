@@ -1,0 +1,129 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // ===============================================================
+    // Assumed Data Model
+    // ===============================================================
+    //
+    // Collection: users
+    // Document ID: {userId}
+    // Fields:
+    //   - uid: string (required)
+    //   - email: string (required)
+    //   - role: string (required, 'chv' | 'official')
+    //   - name: string (required)
+    //   - district: string (required)
+    //
+    // Collection: reports
+    // Document ID: {reportId}
+    // Fields:
+    //   - chvId: string (required)
+    //   - patientName: string (required)
+    //   - age: number (required)
+    //   - gender: string (required)
+    //   - symptoms: list (required)
+    //   - description: string (optional)
+    //   - location: map (required)
+    //   - aiDiagnosis: map (optional)
+    //   - malnutritionScan: map (optional)
+    //   - timestamp: number (required)
+    //
+    // Collection: alerts
+    // Document ID: {alertId}
+    // Fields:
+    //   - district: string (required)
+    //   - condition: string (required)
+    //   - severity: string (required)
+    //   - affectedCount: number (required)
+    //   - aiAnalysis: string (required)
+    //   - timestamp: number (required)
+    //   - isResolved: bool (required)
+    //
+    // ===============================================================
+
+    // ===============================================================
+    // Helper Functions
+    // ===============================================================
+    
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+    
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+    
+    function getUserData() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
+    }
+    
+    function isOfficial() {
+      return isAuthenticated() && getUserData().role == 'official';
+    }
+    
+    function isCHV() {
+      return isAuthenticated() && getUserData().role == 'chv';
+    }
+
+    function isAdmin() {
+      return isAuthenticated() && (
+        getUserData().role == 'admin' ||
+        (request.auth.token.email == "wjdaniel379@gmail.com" && request.auth.token.email_verified == true)
+      );
+    }
+
+    function isValidUser(data) {
+      return data.keys().hasAll(['uid', 'email', 'role', 'name', 'district']) &&
+             data.uid == request.auth.uid &&
+             data.role in ['chv', 'official'] &&
+             data.name is string && data.name.size() < 100 &&
+             data.district is string;
+    }
+
+    function isValidReport(data) {
+      return data.keys().hasAll(['chvId', 'patientName', 'age', 'gender', 'symptoms', 'location', 'timestamp']) &&
+             data.chvId == request.auth.uid &&
+             data.patientName is string && data.patientName.size() < 100 &&
+             data.age is number && data.age >= 0 &&
+             data.gender in ['male', 'female', 'other'] &&
+             data.symptoms is list && data.symptoms.size() < 50 &&
+             data.location is map &&
+             data.timestamp is number;
+    }
+
+    function isValidAlert(data) {
+      return data.keys().hasAll(['district', 'condition', 'severity', 'affectedCount', 'aiAnalysis', 'timestamp', 'isResolved']) &&
+             data.district is string &&
+             data.condition is string &&
+             data.severity in ['low', 'medium', 'high', 'critical'] &&
+             data.affectedCount is number &&
+             data.aiAnalysis is string &&
+             data.timestamp is number &&
+             data.isResolved is bool;
+    }
+
+    // ===============================================================
+    // Match Rules
+    // ===============================================================
+
+    match /users/{userId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated() && isOwner(userId) && isValidUser(request.resource.data);
+      allow update: if isAuthenticated() && isOwner(userId) && isValidUser(request.resource.data) && request.resource.data.role == resource.data.role;
+    }
+
+    match /reports/{reportId} {
+      allow read: if isAuthenticated();
+      allow create: if isCHV() && isValidReport(request.resource.data);
+      allow update: if isOfficial() || (isCHV() && request.auth.uid == resource.data.chvId);
+      allow delete: if isAdmin();
+    }
+
+    match /alerts/{alertId} {
+      allow read: if isAuthenticated();
+      allow create, update: if isOfficial() && isValidAlert(request.resource.data);
+      allow delete: if isAdmin();
+    }
+  }
+}
