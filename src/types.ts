@@ -1,52 +1,85 @@
 export enum Urgency {
-  LOW = "low",
-  MEDIUM = "medium",
-  HIGH = "high",
+  MODERATE = "moderate",
+  SERIOUS = "serious",
   CRITICAL = "critical",
+  HIGH = "critical", // Alias for backward compatibility
 }
 
-export interface PatientReport {
+export enum IncidentStatus {
+  RECEIVED = "received",
+  DISPATCHED = "dispatched",
+  EN_ROUTE = "en_route",
+  ARRIVED = "arrived",
+  COMPLETED = "completed",
+}
+
+export enum UserRole {
+  REPORTER = "reporter",
+  NURSE = "nurse",
+  DOCTOR = "doctor",
+  DRIVER = "driver",
+  BODA_COORDINATOR = "boda_coordinator",
+  BODA_RIDER = "boda_rider",
+}
+
+export interface SOSIncident {
   id: string;
-  chvId: string;
-  patientId: string; // Added for history tracking
-  patientName: string;
-  age: number;
-  gender: "male" | "female" | "other";
+  reporterId: string;
+  reporterName: string;
+  reporterPhone?: string;
   symptoms: string[];
+  severity: Urgency;
   description: string;
+  photoUrl?: string;
   location: {
     lat: number;
     lng: number;
-    district: string;
+    campusZone: string;
+    specificLocation?: string;
   };
-  aiDiagnosis?: {
-    possibleConditions: string[];
-    urgency: Urgency;
-    recommendation: string;
-  };
-  malnutritionScan?: {
-    status: "normal" | "at_risk" | "severe";
-    confidence: number;
-    notes: string;
+  status: IncidentStatus;
+  assignedResource?: {
+    type: "ambulance" | "boda";
+    id: string;
+    name: string;
+    phone: string;
   };
   timestamp: number;
+  auditTrail: {
+    status: IncidentStatus;
+    timestamp: number;
+    note?: string;
+  }[];
 }
 
-export interface OutbreakAlert {
+export interface ResourceStatus {
   id: string;
-  district: string;
-  condition: string;
-  severity: Urgency;
-  affectedCount: number;
-  aiAnalysis: string;
+  type: "ambulance" | "boda" | "staff";
+  name: string;
+  status: "available" | "on_call" | "off_duty" | "maintenance" | "busy";
+  lastUpdated: number;
+  metadata?: {
+    fuelLevel?: number;
+    oxygenLevel?: string;
+    equipmentStatus?: string;
+  };
+}
+
+export interface VoiceMessage {
+  id: string;
+  incidentId: string;
+  senderId: string;
+  senderRole: UserRole;
+  text: string; // Transcription
+  audioUrl?: string;
   timestamp: number;
-  isResolved: boolean;
+  language: "en" | "lg";
 }
 
 export interface UserProfile {
   uid: string;
   email: string;
-  role: "chv" | "official";
+  role: UserRole;
   name: string;
-  district: string;
+  phone?: string;
 }

@@ -1,39 +1,52 @@
 import React, { useState, useEffect } from "react";
 import { auth, db } from "./firebase";
 import { signInWithPopup, GoogleAuthProvider, onAuthStateChanged, User } from "firebase/auth";
-import { doc, getDoc, setDoc, addDoc, collection, query, orderBy, onSnapshot } from "firebase/firestore";
-import { UserProfile, PatientReport } from "./types";
-import SymptomForm from "./components/CHVPortal/SymptomForm";
-import VisionScan from "./components/CHVPortal/VisionScan";
-import OutbreakMonitor from "./components/OfficialDashboard/OutbreakMonitor";
-import { DISTRICTS } from "./constants";
+import { doc, getDoc, setDoc, addDoc, collection, query, orderBy, onSnapshot, updateDoc } from "firebase/firestore";
+import { UserProfile, SOSIncident, UserRole, ResourceStatus, IncidentStatus, VoiceMessage } from "./types";
 import { motion, AnimatePresence } from "motion/react";
-import PatientHistory from "./components/CHVPortal/PatientHistory";
 import { 
-  Stethoscope, 
+  HeartPulse, 
   ShieldAlert, 
   User as UserIcon, 
   LogOut, 
   LayoutDashboard, 
-  Camera, 
-  FileText,
-  HeartPulse,
+  MessageSquare,
   Activity,
   ChevronRight,
-  History
+  Bike,
+  Truck,
+  Stethoscope,
+  Bell
 } from "lucide-react";
 import { cn } from "./lib/utils";
+import ReporterPortal from "./components/Reporter/ReporterPortal";
+import DispatchPortal from "./components/Dispatch/DispatchPortal";
+import BodaPortal from "./components/Boda/BodaPortal";
+import FloatingFirstAid from "./components/Shared/FloatingFirstAid";
+import VoiceChat from "./components/Shared/VoiceChat";
 
 export default function App() {
   const [user, setUser] = useState<User | null>(null);
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<"symptoms" | "vision" | "dashboard" | "history">("symptoms");
-  const [allReports, setAllReports] = useState<PatientReport[]>([]);
-  const [selectedPatientId, setSelectedPatientId] = useState<string | null>(null);
+  const [incidents, setIncidents] = useState<SOSIncident[]>([]);
+  const [resources, setResources] = useState<ResourceStatus[]>([]);
+  const [voiceMessages, setVoiceMessages] = useState<VoiceMessage[]>([]);
+  const [showVoiceChat, setShowVoiceChat] = useState(false);
+  const [activeIncidentId, setActiveIncidentId] = useState<string | null>(null);
+
+  useEffect(() => {
+    const handleToggleVoiceChat = () => {
+      if (activeIncidentId) {
+        setShowVoiceChat(true);
+      }
+    };
+    window.addEventListener("toggleVoiceChat", handleToggleVoiceChat);
+    return () => window.removeEventListener("toggleVoiceChat", handleToggleVoiceChat);
+  }, [activeIncidentId]);
 
   const UgandaFlag = () => (
-    <div className="flex items-center gap-1 h-6 w-10 overflow-hidden rounded shadow-sm border border-slate-200">
+    <div className="flex items-center gap-1 h-6 w-10 overflow-hidden rounded shadow-sm border border-slate-200 shrink-0">
       <div className="h-full w-full flex flex-col">
         <div className="h-[16.6%] bg-black"></div>
         <div className="h-[16.6%] bg-uganda-yellow"></div>
@@ -60,18 +73,24 @@ export default function App() {
       setLoading(false);
     });
 
-    const qReports = query(collection(db, "reports"), orderBy("timestamp", "desc"));
-    const unsubscribeReports = onSnapshot(qReports, (snapshot) => {
-      setAllReports(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as PatientReport)));
+    const qIncidents = query(collection(db, "incidents"), orderBy("timestamp", "desc"));
+    const unsubscribeIncidents = onSnapshot(qIncidents, (snapshot) => {
+      setIncidents(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as SOSIncident)));
+    });
+
+    const qResources = query(collection(db, "resources"));
+    const unsubscribeResources = onSnapshot(qResources, (snapshot) => {
+      setResources(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as ResourceStatus)));
     });
 
     return () => {
       unsubscribeAuth();
-      unsubscribeReports();
+      unsubscribeIncidents();
+      unsubscribeResources();
     };
   }, []);
 
-  const handleLogin = async (role: "chv" | "official") => {
+  const handleLogin = async (role: UserRole) => {
     const provider = new GoogleAuthProvider();
     try {
       const result = await signInWithPopup(auth, provider);
@@ -81,44 +100,69 @@ export default function App() {
         email: user.email || "",
         role,
         name: user.displayName || "User",
-        district: DISTRICTS[0]
+        phone: "0700 000 000"
       };
       await setDoc(doc(db, "users", user.uid), profileData);
       setProfile(profileData);
-      setActiveTab(role === "chv" ? "symptoms" : "dashboard");
+
+      // Bootstrap resources if official
+      if (role === UserRole.NURSE || role === UserRole.BODA_COORDINATOR) {
+        const initialResources: ResourceStatus[] = [
+          { id: "amb-1", type: "ambulance", name: "Ambulance A", status: "available", lastUpdated: Date.now() },
+          { id: "amb-2", type: "ambulance", name: "Ambulance B", status: "available", lastUpdated: Date.now() },
+          { id: "boda-1", type: "boda", name: "Rider: Musoke", status: "available", lastUpdated: Date.now() },
+          { id: "boda-2", type: "boda", name: "Rider: Okello", status: "available", lastUpdated: Date.now() },
+          { id: "staff-1", type: "staff", name: "Dr. Sarah", status: "available", lastUpdated: Date.now() },
+        ];
+        for (const res of initialResources) {
+          await setDoc(doc(db, "resources", res.id), res);
+        }
+      }
     } catch (error) {
       console.error("Login failed:", error);
     }
   };
 
-  const handleReportSubmit = async (report: Partial<PatientReport>) => {
-    if (!user) return;
-    try {
-      await addDoc(collection(db, "reports"), {
-        ...report,
-        chvId: user.uid
-      });
-      alert("Report submitted successfully!");
-      setActiveTab("symptoms");
-    } catch (error) {
-      console.error("Submission failed:", error);
-      alert("Failed to submit report.");
-    }
+  const handleSOS = async (incident: Partial<SOSIncident>) => {
+    if (!user || !profile) return;
+    const newIncident: SOSIncident = {
+      id: `SOS-${Math.random().toString(36).substr(2, 6).toUpperCase()}`,
+      reporterId: user.uid,
+      reporterName: profile.name,
+      reporterPhone: profile.phone,
+      symptoms: incident.symptoms || [],
+      severity: incident.severity || IncidentStatus.RECEIVED as any,
+      description: incident.description || "",
+      location: incident.location as any,
+      status: IncidentStatus.RECEIVED,
+      timestamp: Date.now(),
+      auditTrail: [{ status: IncidentStatus.RECEIVED, timestamp: Date.now(), note: "Incident reported" }]
+    };
+    await setDoc(doc(db, "incidents", newIncident.id), newIncident);
+    setActiveIncidentId(newIncident.id);
+  };
+
+  const updateIncident = async (id: string, updates: Partial<SOSIncident>) => {
+    await updateDoc(doc(db, "incidents", id), updates);
+  };
+
+  const updateResource = async (id: string, updates: Partial<ResourceStatus>) => {
+    await updateDoc(doc(db, "resources", id), updates);
   };
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-[#FFFEF5] flex items-center justify-center">
+      <div className="min-h-screen bg-slate-50 flex items-center justify-center">
         <motion.div 
           animate={{ scale: [1, 1.1, 1], opacity: [0.5, 1, 0.5] }}
           transition={{ duration: 2, repeat: Infinity }}
           className="flex flex-col items-center gap-4"
         >
-          <div className="w-20 h-20 bg-uganda-yellow/10 rounded-3xl flex items-center justify-center mb-2">
-            <HeartPulse className="w-12 h-12 text-uganda-red" />
+          <div className="w-20 h-20 bg-blue-600 rounded-3xl flex items-center justify-center mb-2 shadow-2xl shadow-blue-200">
+            <Activity className="w-12 h-12 text-white" />
           </div>
           <UgandaFlag />
-          <p className="text-slate-500 font-bold animate-pulse tracking-widest uppercase text-[10px]">Uganda MoH • HealthLink AI</p>
+          <p className="text-slate-900 font-black tracking-widest uppercase text-[10px]">EDIS • UCU Mukono</p>
         </motion.div>
       </div>
     );
@@ -126,240 +170,168 @@ export default function App() {
 
   if (!user || !profile) {
     return (
-      <div className="min-h-screen bg-[#FFFEF5] flex items-center justify-center p-6 relative overflow-hidden">
-        {/* Background Accents */}
-        <div className="absolute top-0 left-0 w-full h-2 bg-uganda-black"></div>
-        <div className="absolute top-2 left-0 w-full h-2 bg-uganda-yellow"></div>
-        <div className="absolute top-4 left-0 w-full h-2 bg-uganda-red"></div>
-        <div className="absolute top-6 left-0 w-full h-2 bg-uganda-black"></div>
-        <div className="absolute top-8 left-0 w-full h-2 bg-uganda-yellow"></div>
-        <div className="absolute top-10 left-0 w-full h-2 bg-uganda-red"></div>
-
+      <div className="min-h-screen bg-slate-50 flex items-center justify-center p-6 relative overflow-hidden">
+        <div className="absolute top-0 left-0 w-full h-1 bg-blue-600"></div>
         <motion.div 
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
-          className="w-full max-w-md bg-white p-10 rounded-[2.5rem] shadow-2xl border border-slate-100 relative z-10"
+          className="w-full max-w-md bg-white p-10 rounded-[3rem] shadow-2xl border border-slate-100 relative z-10"
         >
           <div className="flex flex-col items-center mb-10">
-            <div className="w-20 h-20 bg-uganda-yellow/10 rounded-3xl flex items-center justify-center mb-6">
-              <HeartPulse className="w-12 h-12 text-uganda-red" />
+            <div className="w-20 h-20 bg-blue-600 rounded-3xl flex items-center justify-center mb-6 shadow-xl shadow-blue-100">
+              <Activity className="w-12 h-12 text-white" />
             </div>
             <div className="flex items-center gap-2 mb-2">
               <UgandaFlag />
-              <h1 className="text-3xl font-black tracking-tight text-slate-900">HealthLink AI</h1>
+              <h1 className="text-3xl font-black tracking-tighter text-slate-900">EDIS</h1>
             </div>
-            <p className="text-slate-500 font-medium text-center">
-              Uganda Community Health Surveillance System
+            <p className="text-slate-500 font-bold text-xs uppercase tracking-widest text-center">
+              Digital Emergency Dispatch & Information System
             </p>
           </div>
 
           <div className="space-y-4">
             <button
-              onClick={() => handleLogin("chv")}
-              className="w-full group relative p-6 bg-white rounded-2xl border-2 border-slate-100 hover:border-uganda-yellow hover:bg-uganda-yellow/5 transition-all text-left"
+              onClick={() => handleLogin(UserRole.REPORTER)}
+              className="w-full group relative p-6 bg-white rounded-2xl border-2 border-slate-100 hover:border-red-600 hover:bg-red-50 transition-all text-left"
             >
               <div className="flex items-center justify-between mb-2">
-                <div className="p-2 bg-uganda-yellow/10 rounded-lg group-hover:bg-uganda-yellow group-hover:text-uganda-black transition-all">
-                  <Stethoscope className="w-6 h-6 text-uganda-red" />
+                <div className="p-2 bg-red-100 rounded-lg group-hover:bg-red-600 group-hover:text-white transition-all text-red-600">
+                  <Bell className="w-6 h-6" />
                 </div>
-                <ChevronRight className="w-5 h-5 text-slate-300 group-hover:text-uganda-red transition-colors" />
+                <ChevronRight className="w-5 h-5 text-slate-300 group-hover:text-red-600 transition-colors" />
               </div>
-              <h3 className="text-lg font-bold text-slate-900">Community Health Volunteer</h3>
-              <p className="text-sm text-slate-500">Submit patient reports and perform vision scans in the field.</p>
+              <h3 className="text-lg font-black text-slate-900 tracking-tight">Reporter Portal</h3>
+              <p className="text-xs font-medium text-slate-500">Students, Staff, and Visitors. One-tap SOS trigger.</p>
             </button>
 
             <button
-              onClick={() => handleLogin("official")}
-              className="w-full group relative p-6 bg-white rounded-2xl border-2 border-slate-100 hover:border-uganda-red hover:bg-uganda-red/5 transition-all text-left"
+              onClick={() => handleLogin(UserRole.NURSE)}
+              className="w-full group relative p-6 bg-white rounded-2xl border-2 border-slate-100 hover:border-blue-600 hover:bg-blue-50 transition-all text-left"
             >
               <div className="flex items-center justify-between mb-2">
-                <div className="p-2 bg-uganda-red/10 rounded-lg group-hover:bg-uganda-red group-hover:text-white transition-all">
-                  <ShieldAlert className="w-6 h-6 text-uganda-red" />
+                <div className="p-2 bg-blue-100 rounded-lg group-hover:bg-blue-600 group-hover:text-white transition-all text-blue-600">
+                  <LayoutDashboard className="w-6 h-6" />
                 </div>
-                <ChevronRight className="w-5 h-5 text-slate-300 group-hover:text-uganda-red transition-colors" />
+                <ChevronRight className="w-5 h-5 text-slate-300 group-hover:text-blue-600 transition-colors" />
               </div>
-              <h3 className="text-lg font-bold text-slate-900">District Health Official</h3>
-              <p className="text-sm text-slate-500">Monitor outbreaks, analyze trends, and manage alerts.</p>
+              <h3 className="text-lg font-black text-slate-900 tracking-tight">Dispatch Dashboard</h3>
+              <p className="text-xs font-medium text-slate-500">Allan Galphin Clinic Staff. Manage alerts and fleet.</p>
             </button>
-            
-            <div className="p-4 bg-slate-50 rounded-2xl border border-slate-100 mt-6">
-              <div className="flex items-center gap-3 mb-2">
-                <ShieldAlert className="w-5 h-5 text-uganda-red" />
-                <span className="font-bold text-sm text-slate-700">Buildathon with AI 2026 Entry</span>
+
+            <button
+              onClick={() => handleLogin(UserRole.BODA_RIDER)}
+              className="w-full group relative p-6 bg-white rounded-2xl border-2 border-slate-100 hover:border-green-600 hover:bg-green-50 transition-all text-left"
+            >
+              <div className="flex items-center justify-between mb-2">
+                <div className="p-2 bg-green-100 rounded-lg group-hover:bg-green-600 group-hover:text-white transition-all text-green-600">
+                  <Bike className="w-6 h-6" />
+                </div>
+                <ChevronRight className="w-5 h-5 text-slate-300 group-hover:text-green-600 transition-colors" />
               </div>
-              <p className="text-[10px] text-slate-500 leading-relaxed font-medium">
-                Empowering Uganda's Community Health Volunteers with real-time AI diagnostics and outbreak monitoring.
-              </p>
-            </div>
+              <h3 className="text-lg font-black text-slate-900 tracking-tight">Boda Responder</h3>
+              <p className="text-xs font-medium text-slate-500">Rapid response network. Receive jobs and navigate.</p>
+            </button>
           </div>
 
-          <p className="mt-10 text-center text-[10px] text-slate-400 font-bold uppercase tracking-widest">
-            Republic of Uganda • Ministry of Health
+          <p className="mt-10 text-center text-[9px] text-slate-400 font-black uppercase tracking-[0.2em]">
+            UCU Mukono • Allan Galphin Health Centre
           </p>
         </motion.div>
       </div>
     );
   }
 
+  const activeIncident = incidents.find(i => i.id === activeIncidentId) || incidents.find(i => i.reporterId === user.uid && i.status !== IncidentStatus.COMPLETED);
+  const assignedIncident = incidents.find(i => i.assignedResource?.id === user.uid || (profile.role === UserRole.BODA_RIDER && i.status === IncidentStatus.DISPATCHED && !i.assignedResource));
+
   return (
-    <div className="min-h-screen bg-[#FFFEF5] flex flex-col md:flex-row">
-      {/* Sidebar */}
-      <aside className="w-full md:w-72 bg-white border-r border-slate-100 flex flex-col p-6 gap-8 z-10 sticky top-0 h-screen">
-        <div className="flex items-center gap-3 mb-2">
-          <div className="p-2 bg-uganda-red rounded-xl shadow-lg shadow-uganda-red/20">
-            <HeartPulse className="w-6 h-6 text-white" />
+    <div className="min-h-screen bg-slate-50 flex flex-col">
+      {/* Header */}
+      <header className="bg-white border-b border-slate-100 px-6 py-4 flex items-center justify-between sticky top-0 z-40">
+        <div className="flex items-center gap-4">
+          <div className="p-2 bg-blue-600 rounded-xl shadow-lg shadow-blue-200">
+            <Activity className="w-6 h-6 text-white" />
           </div>
-          <div className="flex flex-col">
-            <span className="text-xl font-black text-slate-900 tracking-tight">HealthLink AI</span>
-            <div className="flex items-center gap-1.5">
+          <div>
+            <h2 className="text-xl font-black text-slate-900 tracking-tighter">EDIS</h2>
+            <div className="flex items-center gap-2">
               <UgandaFlag />
-              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Uganda MoH</span>
+              <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Allan Galphin • UCU Mukono</span>
             </div>
           </div>
         </div>
 
-        <nav className="flex-1 space-y-2">
-          {profile.role === "chv" ? (
-            <>
-              <button
-                onClick={() => setActiveTab("symptoms")}
-                className={cn(
-                  "w-full flex items-center gap-3 px-4 py-3 rounded-xl font-semibold transition-all",
-                  activeTab === "symptoms" ? "bg-uganda-yellow/10 text-uganda-red" : "text-slate-500 hover:bg-slate-50"
-                )}
-              >
-                <FileText className="w-5 h-5" />
-                Symptom Report
-              </button>
-              <button
-                onClick={() => setActiveTab("vision")}
-                className={cn(
-                  "w-full flex items-center gap-3 px-4 py-3 rounded-xl font-semibold transition-all",
-                  activeTab === "vision" ? "bg-uganda-yellow/10 text-uganda-red" : "text-slate-500 hover:bg-slate-50"
-                )}
-              >
-                <Camera className="w-5 h-5" />
-                Vision Scan
-              </button>
-              <button
-                onClick={() => setActiveTab("history")}
-                className={cn(
-                  "w-full flex items-center gap-3 px-4 py-3 rounded-xl font-semibold transition-all",
-                  activeTab === "history" ? "bg-uganda-yellow/10 text-uganda-red" : "text-slate-500 hover:bg-slate-50"
-                )}
-              >
-                <History className="w-5 h-5" />
-                Patient History
-              </button>
-            </>
-          ) : (
-            <button
-              onClick={() => setActiveTab("dashboard")}
-              className={cn(
-                "w-full flex items-center gap-3 px-4 py-3 rounded-xl font-semibold transition-all",
-                activeTab === "dashboard" ? "bg-uganda-red/5 text-uganda-red" : "text-slate-500 hover:bg-slate-50"
-              )}
-            >
-              <LayoutDashboard className="w-5 h-5" />
-              Outbreak Monitor
-            </button>
-          )}
-        </nav>
-
-        <div className="pt-6 border-t border-slate-50 space-y-4">
-          <div className="bg-slate-50 p-4 rounded-2xl">
-            <div className="flex items-center gap-3 mb-3">
-              <div className="w-10 h-10 bg-white rounded-full flex items-center justify-center shadow-sm border border-slate-100 overflow-hidden">
-                {user?.photoURL ? (
-                  <img src={user.photoURL} alt="Profile" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
-                ) : (
-                  <UserIcon className="w-5 h-5 text-slate-400" />
-                )}
-              </div>
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-bold text-slate-900 truncate">{profile.name}</p>
-                <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">{profile.role}</p>
-              </div>
+        <div className="flex items-center gap-6">
+          <div className="hidden md:flex flex-col items-end">
+            <p className="text-xs font-black text-slate-900 uppercase tracking-tight">{new Date().toLocaleTimeString()}</p>
+            <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">System Online</p>
+          </div>
+          <div className="flex items-center gap-3 pl-6 border-l border-slate-100">
+            <div className="text-right">
+              <p className="text-xs font-black text-slate-900">{profile.name}</p>
+              <p className="text-[9px] font-bold text-blue-600 uppercase tracking-widest">{profile.role}</p>
             </div>
-            <button
+            <button 
               onClick={() => auth.signOut()}
-              className="w-full flex items-center justify-center gap-2 py-2 text-[10px] font-bold text-slate-400 hover:text-uganda-red transition-colors"
+              className="p-2 hover:bg-red-50 text-slate-300 hover:text-red-600 rounded-xl transition-all"
             >
-              <LogOut className="w-3.5 h-3.5" />
-              Sign Out
+              <LogOut className="w-5 h-5" />
             </button>
           </div>
-          <div className="flex justify-center">
-            <UgandaFlag />
-          </div>
         </div>
-      </aside>
+      </header>
 
       {/* Main Content */}
-      <main className="flex-1 p-6 md:p-10 overflow-y-auto">
-        <header className="mb-10 flex justify-between items-end max-w-5xl mx-auto">
-          <div>
-            <div className="flex items-center gap-2 mb-2">
-              <div className="w-2 h-2 rounded-full bg-uganda-red animate-pulse"></div>
-              <span className="text-xs font-bold text-uganda-red uppercase tracking-widest">System Active</span>
-            </div>
-            <h2 className="text-4xl font-black text-slate-900 tracking-tight">
-              {activeTab === "symptoms" && "Patient Reporting"}
-              {activeTab === "vision" && "Malnutrition Scan"}
-              {activeTab === "dashboard" && "Outbreak Surveillance"}
-              {activeTab === "history" && "Patient History"}
-            </h2>
-          </div>
-          <div className="text-right hidden md:block">
-            <p className="text-sm font-bold text-slate-900">{new Date().toLocaleDateString('en-UG', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</p>
-            <p className="text-xs font-medium text-slate-400">East Africa Time (EAT)</p>
-          </div>
-        </header>
+      <main className="flex-1 p-6 overflow-y-auto">
+        <div className="max-w-7xl mx-auto">
+          {profile.role === UserRole.REPORTER && (
+            <>
+              <ReporterPortal onSOS={handleSOS} activeIncident={activeIncident || null} />
+              <FloatingFirstAid />
+            </>
+          )}
 
-        <AnimatePresence mode="wait">
-          <motion.div
-            key={activeTab}
-            initial={{ opacity: 0, x: 20 }}
-            animate={{ opacity: 1, x: 0 }}
-            exit={{ opacity: 0, x: -20 }}
-            transition={{ duration: 0.2 }}
-            className="max-w-5xl mx-auto"
-          >
-            {activeTab === "symptoms" && <SymptomForm onReportSubmit={handleReportSubmit} />}
-            {activeTab === "vision" && <VisionScan onScanComplete={(res) => {
-              alert("Scan complete! You can now attach this to a symptom report.");
-              setActiveTab("symptoms");
-            }} />}
-            {activeTab === "dashboard" && <OutbreakMonitor />}
-            {activeTab === "history" && (
-              <div className="space-y-6">
-                <div className="bg-white p-4 rounded-2xl border border-slate-100 shadow-sm flex gap-4 overflow-x-auto">
-                  {[...new Set(allReports.map(r => r.patientId))].map(pid => (
-                    <button
-                      key={pid}
-                      onClick={() => setSelectedPatientId(pid)}
-                      className={cn(
-                        "px-4 py-2 rounded-xl text-sm font-bold whitespace-nowrap transition-all",
-                        selectedPatientId === pid ? "bg-uganda-red text-white shadow-lg shadow-uganda-red/20" : "bg-slate-50 text-slate-500 hover:bg-slate-100"
-                      )}
-                    >
-                      {allReports.find(r => r.patientId === pid)?.patientName}
-                    </button>
-                  ))}
-                </div>
-                {selectedPatientId ? (
-                  <PatientHistory reports={allReports} patientId={selectedPatientId} />
-                ) : (
-                  <div className="text-center p-12 bg-white rounded-2xl border border-dashed border-slate-200">
-                    <History className="w-12 h-12 text-slate-300 mx-auto mb-3" />
-                    <p className="text-slate-500 font-medium">Select a patient to view their history</p>
-                  </div>
-                )}
-              </div>
-            )}
-          </motion.div>
-        </AnimatePresence>
+          {profile.role === UserRole.NURSE && (
+            <DispatchPortal 
+              incidents={incidents} 
+              resources={resources} 
+              onUpdateIncident={updateIncident}
+              onUpdateResource={updateResource}
+            />
+          )}
+
+          {profile.role === UserRole.BODA_RIDER && (
+            <BodaPortal 
+              assignedIncident={assignedIncident || null} 
+              onUpdateStatus={(status) => updateIncident(assignedIncident!.id, { status })}
+              onLogout={() => auth.signOut()}
+            />
+          )}
+        </div>
       </main>
+
+      {/* Voice Chat Overlay */}
+      {showVoiceChat && activeIncidentId && (
+        <VoiceChat 
+          incidentId={activeIncidentId}
+          currentUserRole={profile.role}
+          messages={voiceMessages}
+          onSendMessage={(text, lang) => {
+            const newMsg: VoiceMessage = {
+              id: Math.random().toString(36).substr(2, 9),
+              incidentId: activeIncidentId,
+              senderId: user.uid,
+              senderRole: profile.role,
+              text,
+              timestamp: Date.now(),
+              language: lang
+            };
+            setVoiceMessages(prev => [...prev, newMsg]);
+          }}
+          onClose={() => setShowVoiceChat(false)}
+        />
+      )}
     </div>
   );
 }
