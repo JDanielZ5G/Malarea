@@ -20,6 +20,7 @@ export enum UserRole {
   DRIVER = "driver",
   BODA_COORDINATOR = "boda_coordinator",
   BODA_RIDER = "boda_rider",
+  ADMIN = "admin",
 }
 
 export interface SOSIncident {
@@ -31,6 +32,8 @@ export interface SOSIncident {
   severity: Urgency;
   description: string;
   photoUrl?: string;
+  victimName?: string;
+  ucuId?: string;
   location: {
     lat: number;
     lng: number;
@@ -38,6 +41,8 @@ export interface SOSIncident {
     specificLocation?: string;
   };
   status: IncidentStatus;
+  medicPickupRequired?: boolean;
+  medicPickupStatus?: "pending" | "picked_up";
   assignedResource?: {
     type: "ambulance" | "boda";
     id: string;

@@ -8,37 +8,19 @@ service cloud.firestore {
     //
     // Collection: users
     // Document ID: {userId}
-    // Fields:
-    //   - uid: string (required)
-    //   - email: string (required)
-    //   - role: string (required, 'chv' | 'official')
-    //   - name: string (required)
-    //   - district: string (required)
+    // Fields: uid, email, role, name, phone
     //
-    // Collection: reports
-    // Document ID: {reportId}
-    // Fields:
-    //   - chvId: string (required)
-    //   - patientName: string (required)
-    //   - age: number (required)
-    //   - gender: string (required)
-    //   - symptoms: list (required)
-    //   - description: string (optional)
-    //   - location: map (required)
-    //   - aiDiagnosis: map (optional)
-    //   - malnutritionScan: map (optional)
-    //   - timestamp: number (required)
+    // Collection: incidents
+    // Document ID: {incidentId}
+    // Fields: reporterId, reporterName, symptoms, severity, location, status, assignedResource, timestamp, auditTrail
     //
-    // Collection: alerts
-    // Document ID: {alertId}
-    // Fields:
-    //   - district: string (required)
-    //   - condition: string (required)
-    //   - severity: string (required)
-    //   - affectedCount: number (required)
-    //   - aiAnalysis: string (required)
-    //   - timestamp: number (required)
-    //   - isResolved: bool (required)
+    // Collection: resources
+    // Document ID: {resourceId}
+    // Fields: type, name, status, lastUpdated, metadata
+    //
+    // Collection: voice_messages
+    // Document ID: {messageId}
+    // Fields: incidentId, senderId, senderRole, text, timestamp, language
     //
     // ===============================================================
 
@@ -58,50 +40,82 @@ service cloud.firestore {
       return get(/databases/$(database)/documents/users/$(request.auth.uid)).data;
     }
     
-    function isOfficial() {
-      return isAuthenticated() && getUserData().role == 'official';
+    function hasRole(roles) {
+      return isAuthenticated() && exists(/databases/$(database)/documents/users/$(request.auth.uid)) && getUserData().role in roles;
     }
-    
-    function isCHV() {
-      return isAuthenticated() && getUserData().role == 'chv';
+
+    function isStaff() {
+      return hasRole(['nurse', 'doctor', 'driver', 'boda_coordinator', 'admin']);
+    }
+
+    function isBoda() {
+      return hasRole(['boda_rider']);
+    }
+
+    function isReporter() {
+      return hasRole(['reporter']);
     }
 
     function isAdmin() {
       return isAuthenticated() && (
-        getUserData().role == 'admin' ||
-        (request.auth.token.email == "wjdaniel379@gmail.com" && request.auth.token.email_verified == true)
+        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) && getUserData().role == 'admin') ||
+        (request.auth.token.email == "wjdaniel379@gmail.com" && request.auth.token.email_verified == true) ||
+        (request.auth.token.email == "trizzydaniels352@gmail.com" && request.auth.token.email_verified == true)
       );
     }
 
+    function hasOnlyAllowedFields(fields) {
+      return request.resource.data.keys().hasOnly(fields);
+    }
+
+    function areImmutableFieldsUnchanged(fields) {
+      return !request.resource.data.diff(resource.data).affectedKeys().hasAny(fields);
+    }
+
+    // Validators
     function isValidUser(data) {
-      return data.keys().hasAll(['uid', 'email', 'role', 'name', 'district']) &&
+      return data.keys().hasAll(['uid', 'email', 'role', 'name']) &&
+             hasOnlyAllowedFields(['uid', 'email', 'role', 'name', 'phone']) &&
              data.uid == request.auth.uid &&
-             data.role in ['chv', 'official'] &&
-             data.name is string && data.name.size() < 100 &&
-             data.district is string;
+             data.role in ['reporter', 'nurse', 'doctor', 'driver', 'boda_coordinator', 'boda_rider', 'admin'] &&
+             data.name is string && data.name.size() > 0 && data.name.size() < 100 &&
+             data.email is string && data.email.size() < 100 &&
+             (!('phone' in data) || (data.phone is string && data.phone.size() < 20));
     }
 
-    function isValidReport(data) {
-      return data.keys().hasAll(['chvId', 'patientId', 'patientName', 'age', 'gender', 'symptoms', 'location', 'timestamp']) &&
-             data.chvId == request.auth.uid &&
-             data.patientId is string && data.patientId.size() > 0 &&
-             data.patientName is string && data.patientName.size() < 100 &&
-             data.age is number && data.age >= 0 &&
-             data.gender in ['male', 'female', 'other'] &&
-             data.symptoms is list && data.symptoms.size() < 50 &&
+    function isValidIncident(data) {
+      return data.keys().hasAll(['reporterId', 'reporterName', 'symptoms', 'severity', 'location', 'status', 'timestamp']) &&
+             hasOnlyAllowedFields(['id', 'reporterId', 'reporterName', 'reporterPhone', 'symptoms', 'severity', 'description', 'photoUrl', 'victimName', 'ucuId', 'location', 'status', 'assignedResource', 'timestamp', 'auditTrail', 'medicPickupRequired', 'medicPickupStatus']) &&
+             data.reporterId is string &&
+             data.reporterName is string && data.reporterName.size() < 100 &&
+             data.symptoms is list && data.symptoms.size() < 20 &&
+             data.severity in ['moderate', 'serious', 'critical'] &&
+             data.status in ['received', 'dispatched', 'en_route', 'arrived', 'completed'] &&
              data.location is map &&
-             data.timestamp is number;
+             data.location.lat is number && data.location.lng is number &&
+             data.timestamp is number &&
+             (!('victimName' in data) || (data.victimName is string && data.victimName.size() < 100)) &&
+             (!('ucuId' in data) || (data.ucuId is string && data.ucuId.size() < 50)) &&
+             (!('reporterPhone' in data) || (data.reporterPhone is string && data.reporterPhone.size() < 20));
     }
 
-    function isValidAlert(data) {
-      return data.keys().hasAll(['district', 'condition', 'severity', 'affectedCount', 'aiAnalysis', 'timestamp', 'isResolved']) &&
-             data.district is string &&
-             data.condition is string &&
-             data.severity in ['low', 'medium', 'high', 'critical'] &&
-             data.affectedCount is number &&
-             data.aiAnalysis is string &&
+    function isValidResource(data) {
+      return data.keys().hasAll(['type', 'name', 'status', 'lastUpdated']) &&
+             hasOnlyAllowedFields(['id', 'type', 'name', 'status', 'lastUpdated', 'metadata']) &&
+             data.type in ['ambulance', 'boda', 'staff'] &&
+             data.status in ['available', 'on_call', 'off_duty', 'maintenance', 'busy'] &&
+             data.name is string && data.name.size() < 100 &&
+             data.lastUpdated is number;
+    }
+
+    function isValidVoiceMessage(data) {
+      return data.keys().hasAll(['incidentId', 'senderId', 'senderRole', 'text', 'timestamp', 'language']) &&
+             hasOnlyAllowedFields(['id', 'incidentId', 'senderId', 'senderRole', 'text', 'audioUrl', 'timestamp', 'language']) &&
+             data.incidentId is string &&
+             data.senderId == request.auth.uid &&
+             data.text is string && data.text.size() < 1000 &&
              data.timestamp is number &&
-             data.isResolved is bool;
+             data.language in ['en', 'lg'];
     }
 
     // ===============================================================
@@ -111,21 +125,35 @@ service cloud.firestore {
     match /users/{userId} {
       allow read: if isAuthenticated();
       allow create: if isAuthenticated() && isOwner(userId) && isValidUser(request.resource.data);
-      allow update: if isAuthenticated() && isOwner(userId) && isValidUser(request.resource.data) && request.resource.data.role == resource.data.role;
+      allow update: if isAuthenticated() && isOwner(userId) && isValidUser(request.resource.data) && 
+                      (request.resource.data.role == resource.data.role || isAdmin());
     }
 
-    match /reports/{reportId} {
-      // Officials can see all reports, CHVs see their own
-      allow read: if isOfficial() || (isCHV() && request.auth.uid == resource.data.chvId);
-      allow create: if isCHV() && isValidReport(request.resource.data);
-      allow update: if isOfficial() || (isCHV() && request.auth.uid == resource.data.chvId);
+    match /incidents/{incidentId} {
+      allow read: if isStaff() || isAdmin() ||
+                    (isReporter() && request.auth.uid == resource.data.reporterId) ||
+                    (isBoda() && (resource.data.status == 'dispatched' || request.auth.uid == resource.data.assignedResource.id));
+      
+      allow create: if (isReporter() || isAdmin()) && isValidIncident(request.resource.data) && request.resource.data.reporterId == request.auth.uid;
+      
+      allow update: if (isStaff() && isValidIncident(request.resource.data)) || 
+                      isAdmin() ||
+                      (isReporter() && request.auth.uid == resource.data.reporterId && isValidIncident(request.resource.data) && areImmutableFieldsUnchanged(['reporterId'])) ||
+                      (isBoda() && request.auth.uid == resource.data.assignedResource.id && isValidIncident(request.resource.data) && areImmutableFieldsUnchanged(['reporterId', 'severity', 'location']));
+      
       allow delete: if isAdmin();
     }
 
-    match /alerts/{alertId} {
+    match /resources/{resourceId} {
       allow read: if isAuthenticated();
-      allow create, update: if isOfficial() && isValidAlert(request.resource.data);
+      allow create: if (isStaff() || isAdmin()) && isValidResource(request.resource.data);
+      allow update: if (isStaff() || isAdmin() || (isBoda() && request.auth.uid == resourceId)) && isValidResource(request.resource.data);
       allow delete: if isAdmin();
+    }
+
+    match /voice_messages/{messageId} {
+      allow read: if isAuthenticated(); 
+      allow create: if isAuthenticated() && isValidVoiceMessage(request.resource.data);
     }
   }
 }

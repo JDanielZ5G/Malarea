@@ -3,6 +3,7 @@
   "description": "EDIS is a specialized emergency medical dispatch platform for Uganda Christian University (UCU) Mukono. It bridges critical gaps in voice-only triage, unclear locations, and rapid response coordination. Featuring a one-tap SOS reporter interface, a multi-role dispatch dashboard for Allan Galphin Health Centre staff, real-time GPS tracking, integrated Boda-Boda rapid response with voice coordination, and context-aware first-aid guidance for bystanders.",
   "requestFramePermissions": [
     "camera",
-    "geolocation"
+    "geolocation",
+    "microphone"
   ]
 }

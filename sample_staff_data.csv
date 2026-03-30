@@ -1,0 +1,7 @@
+Staff ID,Email,Password,Role,Name
+nurse01,nurse01@ucu.ac.ug,password123,nurse,Nurse Sarah
+nurse02,nurse02@ucu.ac.ug,password123,nurse,Nurse John
+rider01,rider01@ucu.ac.ug,password123,boda_rider,Rider Musoke
+rider02,rider02@ucu.ac.ug,password123,boda_rider,Rider Okello
+admin01,admin01@ucu.ac.ug,password123,admin,Admin Allan
+doctor01,doctor01@ucu.ac.ug,password123,doctor,Dr. Mukasa
